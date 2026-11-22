@@ -18,6 +18,7 @@ A comprehensive time-series forecasting system for predicting daily Air Quality 
 - [Installation](#-installation)
 - [Usage](#-usage)
 - [Results & Insights](#-results--insights)
+- [Summary & Conclusions](#-summary--conclusions)
 - [Future Improvements](#-future-improvements)
 - [Contributing](#-contributing)
 
@@ -321,6 +322,21 @@ print(f"Predicted AQI: {aqi_value:.1f}")
 - ⚠️ Heavy tails indicate occasional large errors
 - 📊 17.9% predictions within ±50 AQI
 - 📊 37.4% predictions within ±100 AQI
+
+---
+
+## 📝 Summary & Conclusions
+
+### **End-to-End Pipeline Summary**
+1. **Data Cleaning & Preprocessing**: Temporal sorting, date indexing, and handling missing observations across 5 Indian cities (2015–2024).
+2. **Stationarity & Lag Selection**: ADF and KPSS tests confirmed stationarity across all cities, while ACF/PACF diagnostics showed weak autocorrelation, motivating a minimal lag design (`AQI_lag1` and 7-day rolling mean) alongside cyclical month encoding, city-specific seasons, and `PM2.5/PM10` ratios.
+3. **Chronological Validation & Modeling**: Evaluated a Persistence baseline against Random Forest, XGBoost, LightGBM, and a simple average Ensemble on a held-out 6-month test split (`TimeSeriesSplit` cross-validation).
+4. **Hyperparameter Optimization**: Applied Bayesian Optimization with Optuna (TPE sampler, 50 trials across 9 hyperparameters) to tune XGBoost, achieving a **30.0% RMSE reduction** over the persistence baseline (`145.29` vs. `207.50`).
+5. **Forecasting & Deployment**: Consolidated recursive multi-horizon forecasting (30, 60, and 90 days), seasonal pollutant sampling, CPCB health categorization, and dominant pollutant attribution into `AQIForecastSystem`, packaged via `joblib`.
+
+### **Conclusions & Pre-Deployment Takeaways**
+- While tree-based models and Optuna tuning significantly outperform naive day-over-day persistence, the near-zero $R^2$ (`-0.002`) and modest directional accuracy (`52.92%`) show that historical pollutant columns alone in this dataset do not explain daily AQI variance.
+- For production deployment, predictions should be paired with confidence intervals and enriched with external meteorological drivers (wind speed, temperature, humidity) and event indicators.
 
 ---
 
