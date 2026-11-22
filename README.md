@@ -1,437 +1,117 @@
-# Air Quality Index (AQI) Forecasting System
+# Air Quality Index (AQI) Forecasting — Learning Project & Retrospective
 
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
-[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.0%2B-orange.svg)](https://scikit-learn.org/)
-[![XGBoost](https://img.shields.io/badge/XGBoost-Latest-red.svg)](https://xgboost.readthedocs.io/)
-
-A comprehensive time-series forecasting system for predicting daily Air Quality Index (AQI) values across 5 major Indian cities up to 90 days in advance, using historical pollution data and advanced machine learning techniques.
+A time-series machine learning project built in Python to explore daily Air Quality Index (AQI) forecasting across **5 major Indian cities** (**Delhi, Mumbai, Chennai, Kolkata, and Bangalore**) over a 10-year span (`2015-01-01` to `2024-12-31`).
 
 ---
 
-## 📋 Table of Contents
+## Motivation
 
-- [Project Overview](#-project-overview)
-- [Dataset Description](#-dataset-description)
-- [Key Features](#-key-features)
-- [Methodology](#-methodology)
-- [Model Performance](#-model-performance)
-- [Installation](#-installation)
-- [Usage](#-usage)
-- [Results & Insights](#-results--insights)
-- [Summary & Conclusions](#-summary--conclusions)
-- [Future Improvements](#-future-improvements)
-- [Contributing](#-contributing)
+This project started out of a practical concern: AQI levels in **Mumbai** were spiking, and I wanted to explore whether historical air pollution data could be used to forecast AQI days or weeks ahead of time. More importantly, I built this as a hands-on learning project to practice the full ML lifecycle—from stationarity testing and cyclical feature engineering to tree-based ensembles, Bayesian hyperparameter tuning with Optuna, residual diagnostics, and packaging a forecasting class.
 
 ---
 
-## 🌍 Project Overview
+## Repository Structure
 
-Air pollution is a critical environmental and public health concern in India. This project develops a production-ready forecasting system that predicts AQI values for **Delhi, Mumbai, Chennai, Kolkata, and Bangalore** with actionable insights for citizens and policymakers.
-
-### **Objectives**
-- Forecast daily AQI values up to **90 days** ahead
-- Identify major pollutants contributing to poor air quality
-- Provide health impact assessments and recommendations
-- Enable comparative analysis across cities
-
-### **Business Impact**
-- 🏥 **Healthcare**: Early warnings for vulnerable populations
-- 🏭 **Policy Making**: Data-driven environmental regulations
-- 📱 **Public Awareness**: Daily air quality forecasts
-- 🔬 **Research**: Understanding pollution patterns and trends
+| File | Description |
+|---|---|
+| `aqi_forecasting_code.ipynb` | Full 51-cell Jupyter notebook covering EDA, feature engineering, model training, Optuna tuning, diagnostics, recursive forecasting prototype, and the consolidated `AQIForecastSystem` class. |
+| `city_day.csv` | Daily air quality dataset (`18,265` rows, `16` columns) across 5 cities from 2015 to 2024. |
 
 ---
 
-## 📊 Dataset Description
+## Dataset & Honest Data Audit
 
-**Source**: Historical pollution data for 5 major Indian cities (2015-2024)
+- **Observations:** `18,265` daily records (`3,653` days per city, `0` missing values).
+- **Features:** `City`, `Datetime`, and 12 pollutants (`PM2.5`, `PM10`, `NO`, `NO2`, `NOx`, `NH3`, `CO`, `SO2`, `O3`, `Benzene`, `Toluene`, `Xylene`).
+- **Target:** `AQI` (and `AQI_Bucket`, dropped before training to avoid target leakage).
 
-| Attribute | Details |
-|-----------|---------|
-| **Records** | 18,265 daily observations |
-| **Period** | 2015-01-01 to 2024-12-31 (10 years) |
-| **Cities** | Delhi, Mumbai, Chennai, Kolkata, Bangalore |
-| **Features** | 13 pollutants + temporal features |
-| **Target** | Air Quality Index (AQI) |
-
-### **Pollutants Measured**
-- **Particulate Matter**: PM2.5, PM10
-- **Gases**: NO, NO2, NOx, NH3, CO, SO2, O3
-- **Volatile Organic Compounds**: Benzene, Toluene, Xylene
-
-### **AQI Categories (India CPCB Standards)**
-
-| Category | Range | Health Impact |
-|----------|-------|---------------|
-| 🟢 Good | 0-50 | Minimal impact |
-| 🟡 Satisfactory | 51-100 | Minor breathing discomfort to sensitive people |
-| 🟠 Moderate | 101-200 | Breathing discomfort to people with lungs/asthma |
-| 🔴 Poor | 201-300 | Breathing discomfort on prolonged exposure |
-| 🟣 Very Poor | 301-400 | Respiratory illness on prolonged exposure |
-| ⚫ Severe | 401-500 | Health emergency - affects healthy people |
+> **Important Note on Data Quality:**  
+> Statistical inspection of `city_day.csv` after building the pipeline revealed that this specific CSV is **synthetic uniform data** rather than real CPCB station readings:
+> - `AQI` is distributed nearly uniformly on `[0, 500]` (`mean = 251.11`, `std = 144.50`), and all 5 cities share nearly identical 10-year averages (`249.8` to `253.3`).
+> - Linear correlations between individual pollutants and `AQI` are near zero (highest is `NO2` at `r = 0.0111`; `PM2.5` is `r = 0.0007`).
+> - Lag-1 autocorrelation of `AQI` per city is near zero (`-0.0358` for Delhi to `+0.0131` for Kolkata).
+> - `AQI_Bucket` labels match India CPCB AQI thresholds only `16.17%` of the time (essentially random across 6 classes).
+>
+> Keeping this documented is intentional: it explains why model $R^2$ stayed near `0` regardless of tuning and highlights why **data quality audits** should happen before modeling.
 
 ---
 
-## ✨ Key Features
+## Pipeline & Methodology
 
-### **1. Comprehensive EDA**
-- Time series trend analysis with 7-day and monthly moving averages
-- Stationarity testing (ADF & KPSS tests)
-- Autocorrelation analysis (ACF/PACF plots)
-- Seasonal pattern identification
+### 1. Preprocessing & EDA
+- Parsed `Datetime` to a `Date` index, sorted by `['City', 'Date']`, and removed rows with missing lag values (`18,265` → `18,260` rows).
+- Plotted 7-day moving averages and monthly resampled AQI trends per city.
+- Ran **ADF** (`p = 0.0000` for all cities) and **KPSS** (`p = 0.1000` for all cities) stationarity tests, plus **ACF/PACF** plots (30 lags on Delhi) which showed weak autocorrelation.
 
-### **2. Advanced Feature Engineering**
-- **Temporal Features**: Month, Year, Day of Week, Weekend indicator
-- **Cyclical Encoding**: Sine/Cosine transformations for month
-- **Season Detection**: Custom season mapping per city
-- **Lag Features**: AQI lag-1, 7-day rolling mean
-- **Pollutant Ratios**: PM2.5/PM10 ratio for better signal
+### 2. Feature Engineering (`23` features)
+- **Calendar features:** `Month`, `Year`, `DayOfWeek`, `IsWeekend`.
+- **Cyclical encoding:** `Month_sin` and `Month_cos` so December and January remain adjacent.
+- **City-specific Indian seasons (`get_season`):** Custom mapping per city (e.g., `Winter`, `Summer`, `Monsoon`, `Post-Monsoon`, plus `SW-Monsoon` and `NE-Monsoon` for Chennai).
+- **Minimal lag features:** `AQI_lag1` and shifted `AQI_roll_mean_7` (kept minimal due to weak ACF).
+- **Pollutant interaction:** `PM_ratio = PM2.5 / (PM10 + 1e-8)`.
 
-### **3. Robust Modeling Pipeline**
-- **Time-based train-test split** (last 6 months held out)
-- **Preprocessing Pipeline**: Separate handling for numerical/categorical features
-- **Multiple Models**: Random Forest, XGBoost, LightGBM, Ensemble
-- **Hyperparameter Optimization**: Bayesian optimization with Optuna (50 trials)
-- **Cross-validation**: TimeSeriesSplit for temporal data integrity
+### 3. Train/Test Split & Preprocessing Pipeline
+- **Chronological holdout (last 6 months):**
+  - **Train:** `2015-01-02` to `2024-06-29` (`17,335` rows)
+  - **Test:** `2024-06-30` to `2024-12-31` (`925` rows)
+- **`ColumnTransformer`:**
+  - Numeric features (`21`): `SimpleImputer(strategy="median")`
+  - Categorical features (`City`, `Season`): `SimpleImputer(strategy="most_frequent")` + `OneHotEncoder(handle_unknown="ignore")`
 
-### **4. Comprehensive Evaluation**
-- **Metrics**: MAE, RMSE, MAPE, R², Direction Accuracy
-- **Residual Analysis**: Heteroscedasticity, normality tests, Q-Q plots
-- **City-level Performance**: Individual assessments per city
-- **Error Analysis**: Temporal patterns, seasonal variations
+### 4. Models Trained & Hyperparameter Tuning
+- **Persistence Baseline:** Predicts tomorrow's AQI equals yesterday's (`AQI_lag1`).
+- **Random Forest:** `RandomForestRegressor(n_estimators=300, random_state=41)`
+- **XGBoost:** `XGBRegressor(n_estimators=300, learning_rate=0.05, max_depth=6)`
+- **LightGBM:** `LGBMRegressor(n_estimators=300, learning_rate=0.05, max_depth=6)`
+- **Ensemble:** Simple unweighted average of Random Forest, XGBoost, and LightGBM predictions.
+- **Optuna-Tuned XGBoost:** Bayesian optimization (`TPESampler`, `50` trials, 5-fold `TimeSeriesSplit` CV) tuning `n_estimators`, `max_depth`, `learning_rate`, `subsample`, `colsample_bytree`, `min_child_weight`, `gamma`, `reg_alpha`, and `reg_lambda`.
 
-### **5. Production-Ready Forecasting**
-- **Multi-horizon forecasting**: 30, 60, 90-day predictions
-- **Confidence intervals**: Growing uncertainty bands
-- **Realistic variability**: Prevents convergence to mean values
-- **Pollutant identification**: Detects major contributing pollutants
-- **Health recommendations**: Automated advisory system
-
----
-
-## 🔬 Methodology
-
-### **1. Data Preprocessing**
-```python
-# Temporal sorting and indexing
-df = df.sort_values(['City', 'Date'])
-df.set_index('Date', inplace=True)
-
-# Missing value handling
-df = df.dropna(subset=['Date', 'AQI'])
-```
-
-### **2. Feature Engineering**
-- **Minimal lag features** based on weak autocorrelation findings
-- **Season-aware** pollutant statistics for forecasting
-- **City-specific** seasonal patterns
-
-### **3. Model Training**
-```
-Baseline → Random Forest → XGBoost → LightGBM → Ensemble → Tuned XGBoost
-```
-
-### **4. Hyperparameter Tuning (Optuna)**
-- **Search Space**: 9 hyperparameters
-- **Optimization**: Tree-structured Parzen Estimator (TPE)
-- **Validation**: 5-fold TimeSeriesSplit
-- **Trials**: 50 iterations
-
-### **5. Forecasting Strategy**
-- **Recursive forecasting** with variability injection
-- **Seasonal pollutant sampling** from historical distributions
-- **Day-of-week patterns** for realistic predictions
-- **Constraint enforcement**: AQI bounded to [0, 500]
+### 5. Iterative Forecasting System
+- **Initial Prototype (`forecast_aqi_with_variability`):** Standalone recursive multi-horizon forecaster (`30`, `60`, `90` days) with seasonal pollutant sampling, day-of-week multipliers, noise injection, and expanding 95% confidence bounds.
+- **Final Consolidated Class (`AQIForecastSystem`):** Combines recursive forecasting, India CPCB AQI categorization (`Good` through `Severe`), dominant pollutant attribution, formatted reporting (`predict_aqi`, `compare_cities_forecast`), 4-panel dashboard plotting (`plot_forecast`), and `joblib` export (`aqi_forecast_deployment.joblib`).
 
 ---
 
-## 📈 Model Performance
+## Model Performance & Outputs
 
-### **Test Set Results (Last 6 Months)**
+### Test Set Results (Last 6 Months: `2024-06-30` to `2024-12-31`)
 
 | Model | MAE | RMSE | MAPE (%) | R² | Direction Acc (%) |
-|-------|-----|------|----------|-----|-------------------|
-| Persistence | 170.38 | 207.50 | 399.50 | -1.04 | 32.47 |
-| Random Forest | 127.34 | 146.02 | 306.54 | -0.01 | 50.97 |
-| XGBoost | 127.95 | 147.68 | 310.52 | -0.04 | 52.38 |
+|---|---:|---:|---:|---:|---:|
+| Persistence (`AQI_lag1`) | 170.38 | 207.50 | 399.50 | -1.04 | 32.47 |
 | LightGBM | 128.76 | 147.93 | 314.16 | -0.04 | 51.84 |
-| Ensemble | 127.73 | 146.67 | 310.29 | -0.02 | 51.30 |
-| **Tuned XGBoost** | **126.98** | **145.29** | **308.66** | **-0.00** | **52.92** |
+| XGBoost | 127.95 | 147.68 | 310.52 | -0.04 | 52.38 |
+| Ensemble (RF + XGB + LGBM) | 127.73 | 146.67 | 310.29 | -0.02 | 51.30 |
+| Random Forest | 127.34 | 146.02 | 306.54 | -0.01 | 50.97 |
+| **Tuned XGBoost** | **126.98** | **145.29** | **308.66** | **-0.002** | **52.92** |
 
-### **🏆 Best Model: Tuned XGBoost**
-- **30% improvement** over baseline persistence model
-- **Best RMSE**: 145.29 (lowest prediction error)
-- **Best MAE**: 126.98 (robust to outliers)
-- **Direction Accuracy**: 52.92% (better than random)
-
-### **Top 10 Feature Importances**
-1. City: Bangalore (4.10%)
-2. Season: Summer (3.75%)
-3. City: Kolkata (3.64%)
-4. AQI 7-day rolling mean (3.59%)
-5. Season: Winter (3.52%)
-6. PM2.5/PM10 ratio (3.50%)
-7. AQI lag-1 (3.49%)
-8. Toluene (3.48%)
-9. Month (cosine) (3.39%)
-10. Benzene (3.39%)
+- **Optuna Search (50 trials, 5-fold `TimeSeriesSplit`):** Best CV RMSE `144.60`; Test RMSE `145.39` (best parameters converged to shallow, heavily regularized trees: `n_estimators=100`, `max_depth=3`, `learning_rate≈0.0116`).
+- **Residual Analysis (Tuned XGBoost):** Mean residual `3.87`, std `145.24`, min `-257.61`, max `248.39`; `17.9%` of test predictions fell within `±50` AQI and `37.4%` within `±100` AQI.
+- **Top Features by Importance:** `City_Bangalore` (`0.041`), `Season_Summer` (`0.038`), `City_Kolkata` (`0.036`), `AQI_roll_mean_7` (`0.036`), `Season_Winter` (`0.035`), `PM_ratio` (`0.035`), `AQI_lag1` (`0.035`), `Toluene` (`0.035`), `Month_cos` (`0.034`), `Benzene` (`0.034`).
 
 ---
 
-## 🚀 Installation
+## Key Lessons Learned & Limitations
 
-### **Prerequisites**
-- Python 3.8+
-- pip package manager
-
-### **Setup**
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/aqi-forecasting.git
-cd aqi-forecasting
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### **Required Libraries**
-```txt
-pandas>=1.3.0
-numpy>=1.21.0
-scikit-learn>=1.0.0
-xgboost>=1.5.0
-lightgbm>=3.3.0
-optuna>=3.0.0
-matplotlib>=3.4.0
-seaborn>=0.11.0
-statsmodels>=0.13.0
-joblib>=1.1.0
-```
+1. **Beating Persistence isn't enough:** On uncorrelated noise, day-over-day persistence doubles error variance ($\text{RMSE} \approx 207.5$). Predicting a constant training mean (`250.89`) achieves `RMSE ≈ 145.22`, meaning the `30%` RMSE drop over persistence reflects baseline choice rather than learned signal.
+2. **Stationarity $\neq$ Predictability:** White noise passes both ADF and KPSS tests; correlation, distribution, and target-label consistency checks are essential before training.
+3. **Panel `TimeSeriesSplit` Ordering:** Sorting by `['City', 'Date']` before passing `X_train` to `TimeSeriesSplit` splits folds across city blocks rather than strictly by global date.
+4. **Same-Day Feature Leakage & Recursive Noise:** Using same-day pollutant readings during test evaluation does not reflect real multi-day forecasting (where future pollutants are unknown), and injecting Gaussian noise during recursive rollouts fabricates variance rather than modeling calibrated uncertainty.
 
 ---
 
-## 💻 Usage
+## Running the Notebook
 
-### **1. Quick Start - Basic Forecast**
-```python
-from aqi_forecast_system import predict_aqi
-
-# Forecast AQI for Delhi for next 30 days
-forecast = predict_aqi(
-    city='Delhi',
-    start_date='2025-01-01',
-    num_days=30
-)
-```
-
-### **2. Advanced Usage - Full Forecast System**
-```python
-import joblib
-from aqi_forecast_system import AQIForecastSystem
-
-# Load pre-trained model
-deployment_package = joblib.load('aqi_forecast_deployment.joblib')
-
-# Initialize forecast system
-forecast_system = AQIForecastSystem(
-    model=deployment_package['model'],
-    feature_cols=deployment_package['feature_cols'],
-    preprocessor=deployment_package['preprocessor'],
-    historical_data=deployment_package['historical_data']
-)
-
-# Generate forecast
-forecast_df = forecast_system.forecast(
-    city='Mumbai',
-    start_date='2025-01-15',
-    num_days=60
-)
-
-# Display results
-forecast_system.display_forecast(forecast_df)
-```
-
-### **3. Multi-City Comparison**
-```python
-from aqi_forecast_system import compare_cities_forecast
-
-# Compare all cities
-all_forecasts, summary = compare_cities_forecast(
-    start_date='2025-01-01',
-    num_days=30
-)
-```
-
-### **4. Custom Prediction**
-```python
-# Load model
-predictor = AQIPredictor('aqi_forecast_deployment.joblib')
-
-# Prepare input data
-data = {
-    'City': 'Bangalore',
-    'PM2.5': 150.0,
-    'PM10': 250.0,
-    'NO2': 45.0,
-    # ... other features
-}
-
-# Predict
-aqi_value = predictor.predict_single(data)
-print(f"Predicted AQI: {aqi_value:.1f}")
-```
-
+1. **Prerequisites:** Python 3.8+ with `pandas`, `numpy`, `matplotlib`, `seaborn`, `scikit-learn`, `xgboost`, `lightgbm`, `optuna`, `statsmodels`, `scipy`, and `joblib`.
+2. **Dataset path:** In Cell 4, the notebook reads `/kaggle/input/cityday/city_day.csv` for Kaggle execution. If running locally in this repository, change that path to `'city_day.csv'`.
+3. **Execute:** Open `aqi_forecasting_code.ipynb` in Jupyter or Kaggle and run cells top-to-bottom.
 
 ---
 
-## 🔍 Results & Insights
+## Future Improvements
 
-### **Key Findings**
-
-#### **1. Stationarity Analysis**
-- ✅ All cities pass ADF test (p < 0.05) → Data is stationary
-- ✅ All cities pass KPSS test (p > 0.05) → No differencing needed
-- 📊 **Conclusion**: Minimal lag features required due to weak autocorrelation
-
-#### **2. Seasonal Patterns**
-- **Winter**: Highest AQI (Delhi peaks at 350+)
-- **Monsoon**: Lowest AQI (natural cleansing)
-- **Post-Monsoon**: Rapid deterioration (crop burning, Diwali)
-
-#### **3. City-Specific Insights**
-| City | Avg AQI | Worst Season | Major Pollutant |
-|------|---------|--------------|-----------------|
-| Delhi | 253 | Winter | PM2.5 |
-| Mumbai | 247 | Summer | PM2.5 |
-| Chennai | 267 | Post-Monsoon | PM2.5 |
-| Kolkata | 260 | Winter | PM2.5 |
-| Bangalore | 248 | Summer | PM2.5 |
-
-#### **4. Model Insights**
-- 🎯 **30% improvement** over baseline persistence
-- 📉 Low R² (-0.00) indicates high natural variability in AQI
-- ✅ Direction accuracy (52.9%) beats random chance
-- 🔧 Ensemble methods show robustness but limited gains
-
-#### **5. Residual Analysis**
-- ✅ Residuals centered around zero (mean: 3.87)
-- ⚠️ Heavy tails indicate occasional large errors
-- 📊 17.9% predictions within ±50 AQI
-- 📊 37.4% predictions within ±100 AQI
-
----
-
-## 📝 Summary & Conclusions
-
-### **End-to-End Pipeline Summary**
-1. **Data Cleaning & Preprocessing**: Temporal sorting, date indexing, and handling missing observations across 5 Indian cities (2015–2024).
-2. **Stationarity & Lag Selection**: ADF and KPSS tests confirmed stationarity across all cities, while ACF/PACF diagnostics showed weak autocorrelation, motivating a minimal lag design (`AQI_lag1` and 7-day rolling mean) alongside cyclical month encoding, city-specific seasons, and `PM2.5/PM10` ratios.
-3. **Chronological Validation & Modeling**: Evaluated a Persistence baseline against Random Forest, XGBoost, LightGBM, and a simple average Ensemble on a held-out 6-month test split (`TimeSeriesSplit` cross-validation).
-4. **Hyperparameter Optimization**: Applied Bayesian Optimization with Optuna (TPE sampler, 50 trials across 9 hyperparameters) to tune XGBoost, achieving a **30.0% RMSE reduction** over the persistence baseline (`145.29` vs. `207.50`).
-5. **Forecasting & Deployment**: Consolidated recursive multi-horizon forecasting (30, 60, and 90 days), seasonal pollutant sampling, CPCB health categorization, and dominant pollutant attribution into `AQIForecastSystem`, packaged via `joblib`.
-
-### **Conclusions & Pre-Deployment Takeaways**
-- While tree-based models and Optuna tuning significantly outperform naive day-over-day persistence, the near-zero $R^2$ (`-0.002`) and modest directional accuracy (`52.92%`) show that historical pollutant columns alone in this dataset do not explain daily AQI variance.
-- For production deployment, predictions should be paired with confidence intervals and enriched with external meteorological drivers (wind speed, temperature, humidity) and event indicators.
-
----
-
-## 🔮 Future Improvements
-
-### **Data Enhancement**
-- [ ] Integrate **meteorological data** (temperature, humidity, wind speed)
-- [ ] Add **traffic density** and **industrial activity** metrics
-- [ ] Incorporate **crop burning** events and **festival dates**
-- [ ] Include **real-time satellite imagery** (NASA MODIS)
-
-### **Model Improvements**
-- [ ] Implement **LSTM/GRU** for better temporal patterns
-- [ ] Try **Prophet** for automatic seasonality detection
-- [ ] Explore **hybrid models** (ARIMA + ML)
-- [ ] Add **attention mechanisms** for feature importance
-
-### **System Enhancements**
-- [ ] **Real-time API** for live predictions
-- [ ] **Web dashboard** with interactive visualizations
-- [ ] **Mobile app** for citizen alerts
-- [ ] **Uncertainty quantification** with Bayesian methods
-- [ ] **Multi-step-ahead evaluation** for longer horizons
-
-### **Deployment**
-- [ ] Containerize with **Docker**
-- [ ] Set up **CI/CD pipeline**
-- [ ] Implement **A/B testing** framework
-- [ ] Add **model monitoring** and drift detection
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. **Fork** the repository
-2. Create a **feature branch** (`git checkout -b feature/AmazingFeature`)
-3. **Commit** your changes (`git commit -m 'Add some AmazingFeature'`)
-4. **Push** to the branch (`git push origin feature/AmazingFeature`)
-5. Open a **Pull Request**
-
-### **Contribution Guidelines**
-- Follow PEP 8 style guide
-- Add unit tests for new features
-- Update documentation accordingly
-- Ensure all tests pass before submitting PR
-
----
-
-## 👥 Authors
-
-**Siya Rozani**
-- GitHub: [@Sia3136](https://github.com/Sia3136)
-- LinkedIn: [Siya Rozani](https://www.linkedin.com/in/siya-rozani-9889592a1/)
-- Email: siarozani3136@gmail.com
-
----
-
-## 🙏 Acknowledgments
-
-- **Dataset Source**: Kaggle - City Day Air Quality Data
-- **Indian Standards**: Central Pollution Control Board (CPCB)
-- **Libraries**: scikit-learn, XGBoost, LightGBM, Optuna
-- **Inspiration**: Public health awareness and environmental protection
-
----
-
-## 📞 Contact & Support
-
-For questions, suggestions, or collaborations:
-- 📧 Email: siarozani3136@gmail.com
-- 💬 GitHub Issues: [Create an issue](https://github.com/Sia3136/AQI-Forecasting-Code/issues)
-
----
-
-## 📊 Citation
-
-If you use this project in your research, please cite:
-
-```bibtex
-@software{aqi_forecasting_2025,
-  author = {Siya Rozani},
-  title = {AQI Forecasting System for Indian Cities},
-  year = {2025},
-  url = {https://github.com/Sia3136/AQI-Forecasting-Code.git}
-}
-```
-
----
-
-<div align="center">
-
-**⭐ If you find this project useful, please consider giving it a star! ⭐**
-
-Made with ❤️ for cleaner air and healthier cities
-
-</div>
+- Replace `city_day.csv` with verified **real-world CPCB / OpenAQ** monitoring data and validate `PM2.5`-to-`AQI` consistency first.
+- Add **meteorological features** (wind speed, temperature, humidity, rainfall) and seasonal event indicators (e.g., Diwali, crop burning).
+- Switch to **direct multi-horizon forecasting** ($y_{t+h}$) using only features known at forecast time $t$.
+- Use **chronological panel rolling-origin CV** (splitting by date across all cities simultaneously).
+- Replace ad-hoc noise injection with **quantile regression** or **conformal prediction** for calibrated uncertainty intervals.
