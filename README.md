@@ -14,8 +14,9 @@ This project started out of a practical concern: AQI levels in **Mumbai** were s
 
 | File | Description |
 |---|---|
-| `aqi_forecasting_code.ipynb` | Full 51-cell Jupyter notebook covering EDA, feature engineering, model training, Optuna tuning, diagnostics, recursive forecasting prototype, and the consolidated `AQIForecastSystem` class. |
+| `aqi-forecasting-code.ipynb` | Full 51-cell Jupyter notebook (executed end-to-end on Kaggle GPU in < 8 minutes) covering EDA, feature engineering, model training, Optuna tuning, diagnostics, recursive forecasting prototype, and the consolidated `AQIForecastSystem` class. |
 | `city_day.csv` | Daily air quality dataset (`18,265` rows, `16` columns) across 5 cities from 2015 to 2024. |
+| `aqi_forecast_deployment.joblib` | Serialized deployment package containing the tuned XGBoost pipeline, preprocessor, feature columns, historical data, and CPCB category metadata. |
 
 ---
 
@@ -76,24 +77,26 @@ This project started out of a practical concern: AQI levels in **Mumbai** were s
 
 ### Test Set Results (Last 6 Months: `2024-06-30` to `2024-12-31`)
 
+*All 51 notebook cells were executed cleanly end-to-end on a Kaggle GPU runtime in under 8 minutes.*
+
 | Model | MAE | RMSE | MAPE (%) | R² | Direction Acc (%) |
 |---|---:|---:|---:|---:|---:|
 | Persistence (`AQI_lag1`) | 170.38 | 207.50 | 399.50 | -1.04 | 32.47 |
 | LightGBM | 128.76 | 147.93 | 314.16 | -0.04 | 51.84 |
-| XGBoost | 127.95 | 147.68 | 310.52 | -0.04 | 52.38 |
-| Ensemble (RF + XGB + LGBM) | 127.73 | 146.67 | 310.29 | -0.02 | 51.30 |
+| XGBoost | 128.22 | 147.94 | 316.32 | -0.04 | 52.16 |
+| Ensemble (RF + XGB + LGBM) | 127.84 | 146.74 | 312.23 | -0.02 | 51.73 |
 | Random Forest | 127.34 | 146.02 | 306.54 | -0.01 | 50.97 |
-| **Tuned XGBoost** | **126.98** | **145.29** | **308.66** | **-0.002** | **52.92** |
+| **Tuned XGBoost** | **127.04** | **145.30** | **308.71** | **-0.00** | **50.11** |
 
-- **Optuna Search (50 trials, 5-fold `TimeSeriesSplit`):** Best CV RMSE `144.60`; Test RMSE `145.39` (best parameters converged to shallow, heavily regularized trees: `n_estimators=100`, `max_depth=3`, `learning_rate≈0.0116`).
-- **Residual Analysis (Tuned XGBoost):** Mean residual `3.87`, std `145.24`, min `-257.61`, max `248.39`; `17.9%` of test predictions fell within `±50` AQI and `37.4%` within `±100` AQI.
-- **Top Features by Importance:** `City_Bangalore` (`0.041`), `Season_Summer` (`0.038`), `City_Kolkata` (`0.036`), `AQI_roll_mean_7` (`0.036`), `Season_Winter` (`0.035`), `PM_ratio` (`0.035`), `AQI_lag1` (`0.035`), `Toluene` (`0.035`), `Month_cos` (`0.034`), `Benzene` (`0.034`).
+- **Optuna Search (50 trials, 5-fold `TimeSeriesSplit`):** Best CV RMSE `144.58`; Test RMSE `145.30` (best parameters converged to shallow, heavily regularized trees: `n_estimators=106`, `max_depth=3`, `learning_rate≈0.0101`).
+- **Residual Analysis (Tuned XGBoost):** Mean residual `3.99`, std `145.24`, min `-252.31`, max `248.24`; `18.1%` of test predictions fell within `±50` AQI and `37.4%` within `±100` AQI.
+- **Top Features by Importance:** `City_Delhi` (`0.048`), `IsWeekend` (`0.045`), `Year` (`0.040`), `Season_Winter` (`0.039`), `Month` (`0.039`), `AQI_roll_mean_7` (`0.038`), `City_Mumbai` (`0.038`), `CO` (`0.038`), `AQI_lag1` (`0.037`), `Season_NE-Monsoon` (`0.037`).
 
 ---
 
 ## Key Lessons Learned & Limitations
 
-1. **Beating Persistence isn't enough:** On uncorrelated noise, day-over-day persistence doubles error variance ($\text{RMSE} \approx 207.5$). Predicting a constant training mean (`250.89`) achieves `RMSE ≈ 145.22`, meaning the `30%` RMSE drop over persistence reflects baseline choice rather than learned signal.
+1. **Beating Persistence isn't enough:** On uncorrelated noise, day-over-day persistence doubles error variance ($\text{RMSE} \approx 207.5$). Predicting a constant training mean (`250.89`) achieves `RMSE ≈ 145.22`, meaning the `30%` RMSE drop over persistence (`207.50` → `145.30`) reflects baseline choice rather than learned signal.
 2. **Stationarity $\neq$ Predictability:** White noise passes both ADF and KPSS tests; correlation, distribution, and target-label consistency checks are essential before training.
 3. **Panel `TimeSeriesSplit` Ordering:** Sorting by `['City', 'Date']` before passing `X_train` to `TimeSeriesSplit` splits folds across city blocks rather than strictly by global date.
 4. **Same-Day Feature Leakage & Recursive Noise:** Using same-day pollutant readings during test evaluation does not reflect real multi-day forecasting (where future pollutants are unknown), and injecting Gaussian noise during recursive rollouts fabricates variance rather than modeling calibrated uncertainty.
@@ -103,8 +106,8 @@ This project started out of a practical concern: AQI levels in **Mumbai** were s
 ## Running the Notebook
 
 1. **Prerequisites:** Python 3.8+ with `pandas`, `numpy`, `matplotlib`, `seaborn`, `scikit-learn`, `xgboost`, `lightgbm`, `optuna`, `statsmodels`, `scipy`, and `joblib`.
-2. **Dataset path:** In Cell 4, the notebook reads `/kaggle/input/cityday/city_day.csv` for Kaggle execution. If running locally in this repository, change that path to `'city_day.csv'`.
-3. **Execute:** Open `aqi_forecasting_code.ipynb` in Jupyter or Kaggle and run cells top-to-bottom.
+2. **Dataset path:** In Cell 4, the notebook reads `/kaggle/input/datasets/sia3136/city-day/city_day.csv` for Kaggle execution. If running locally in this repository, change that path to `'city_day.csv'`.
+3. **Execute:** Open `aqi-forecasting-code.ipynb` in Jupyter or Kaggle and run cells top-to-bottom.
 
 ---
 
