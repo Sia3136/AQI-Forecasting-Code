@@ -9,8 +9,7 @@
 
 Time-series regression and multi-horizon AQI forecasting pipeline across five Indian cities (**Delhi, Mumbai, Chennai, Kolkata, and Bangalore**), with model benchmarking, Bayesian hyperparameter tuning, residual diagnostics, and a packaged forecasting class (`AQIForecastSystem`).
 
-> **Retrospective Blog Post:** [When the Model Learns Nothing: My First End-to-End ML Project](https://gradientsandgroundtruth.hashnode.dev/when-the-model-learns-nothing-my-first-end-to-end-ml-project)  
-> **Key Takeaway:** Auditing the dataset after training revealed that `city_day.csv` is uniformly distributed synthetic noise—meaning a simple constant-mean baseline (`RMSE ≈ 145.22`) matches the tuned XGBoost model (`RMSE = 145.30`, `R² = -0.00`), and proving why checking data quality, correlations, and trivial baselines *before* modeling matters more than tuning.
+> **Blog Post:** [When the Model Learns Nothing: My First End-to-End ML Project](https://gradientsandgroundtruth.hashnode.dev/when-the-model-learns-nothing-my-first-end-to-end-ml-project)
 
 ---
 
@@ -25,6 +24,7 @@ Time-series regression and multi-horizon AQI forecasting pipeline across five In
 - [Honest Future Improvements](#honest-future-improvements)
 - [Setup & Run Instructions](#setup--run-instructions)
 - [Contributing](#contributing)
+- [Key Takeaway](#key-takeaway)
 
 ---
 
@@ -174,3 +174,11 @@ Contributions and improvements are welcome! You can use or extend this repositor
 3. **Make your changes** (for example, integrating real CPCB/OpenAQ data, adding weather features, or implementing direct multi-horizon forecasting).
 4. **Commit and push** (`git commit -m "Describe your improvement"` && `git push origin feature/your-improvement`).
 5. **Open a Pull Request** describing what changed and how it affected evaluation metrics.
+
+---
+
+## Key Takeaway
+
+- **Audit data and baselines before tuning:** `city_day.csv` turned out to be uniformly distributed synthetic noise, so a simple constant-mean baseline (`RMSE ≈ 145.22`) matched the tuned XGBoost model (`RMSE = 145.30`, `R² = -0.00`).
+- **What this project taught me:** Building the full pipeline was still valuable practice, and catching this mistake reinforced why checking distributions, target-feature correlations, and trivial baselines *first* is essential in any ML project.
+- **Full write-up:** [When the Model Learns Nothing: My First End-to-End ML Project](https://gradientsandgroundtruth.hashnode.dev/when-the-model-learns-nothing-my-first-end-to-end-ml-project)
