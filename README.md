@@ -9,6 +9,9 @@
 
 Time-series regression and multi-horizon AQI forecasting pipeline across five Indian cities (**Delhi, Mumbai, Chennai, Kolkata, and Bangalore**), with model benchmarking, Bayesian hyperparameter tuning, residual diagnostics, and a packaged forecasting class (`AQIForecastSystem`).
 
+> **Retrospective Blog Post:** [When the Model Learns Nothing: My First End-to-End ML Project](https://gradientsandgroundtruth.hashnode.dev/when-the-model-learns-nothing-my-first-end-to-end-ml-project)  
+> **Key Takeaway:** Auditing the dataset after training revealed that `city_day.csv` is uniformly distributed synthetic noise—meaning a simple constant-mean baseline (`RMSE ≈ 145.22`) matches the tuned XGBoost model (`RMSE = 145.30`, `R² = -0.00`), and proving why checking data quality, correlations, and trivial baselines *before* modeling matters more than tuning.
+
 ---
 
 ## Table of Contents
